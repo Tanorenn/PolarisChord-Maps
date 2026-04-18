@@ -295,7 +295,7 @@ def generate_index_html(entries: list[dict], out_dir: Path):
   </style>
 </head>
 <body>
-  <h1>ポラリスコード 譜面</h1>
+  <h1>ポラリスコード 譜面保管所</h1>
   <p class="subtitle">Polaris Code Chart Archive</p>
   <div class="song-list">
 {items_html}
@@ -319,10 +319,17 @@ def main():
 
   # 1曲だけ生成
   python make_page.py docs/saiph/
+
+  # 別の場所からdocsへコピー+HTML生成
+  python make_page.py chart_output/RUINA/ --title RUINA --docs-dir docs/
 """)
 
     parser.add_argument("dir", type=Path,
                         help="docsフォルダ、または1曲分のフォルダ")
+    parser.add_argument("--title", default=None,
+                        help="曲名（未指定ならフォルダ名を使用）")
+    parser.add_argument("--docs-dir", type=Path, default=None,
+                        help="出力先ディレクトリ（指定すると画像をコピー）")
 
     args = parser.parse_args()
     target = args.dir
@@ -332,14 +339,27 @@ def main():
         sys.exit(1)
 
     # target 直下にPNGがあるか？ → 1曲分のフォルダ
-    # なければ → 親フォルダとして子を探索
     pngs_in_target = list(target.glob("*.png"))
 
     if pngs_in_target:
         # 1曲分のフォルダが直接指定された
         images = sorted(pngs_in_target, key=lambda p: _extract_number(p.name))
-        title = target.name
-        generate_chart_html(images, title, target)
+        title = args.title or target.name
+
+        # docs-dir指定時はコピー
+        if args.docs_dir:
+            import shutil
+            out_dir = args.docs_dir / (args.title or target.name)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            if target.resolve() != out_dir.resolve():
+                for img in images:
+                    shutil.copy2(img, out_dir / img.name)
+                images = sorted(out_dir.glob("*.png"),
+                                key=lambda p: _extract_number(p.name))
+        else:
+            out_dir = target
+
+        generate_chart_html(images, title, out_dir)
         print("[DONE] 完了！")
         return
 
