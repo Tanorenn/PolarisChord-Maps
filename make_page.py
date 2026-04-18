@@ -295,7 +295,7 @@ def generate_index_html(entries: list[dict], out_dir: Path):
   </style>
 </head>
 <body>
-  <h1>ポラリスコード 譜面保管所</h1>
+  <h1>ポラリスコード 譜面</h1>
   <p class="subtitle">Polaris Code Chart Archive</p>
   <div class="song-list">
 {items_html}
@@ -314,52 +314,48 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
-  # 1曲分
-  python make_page.py chart_output/ --title "楽曲名 [MASTER]"
+  # docs/ 以下のフォルダを自動探索してHTML一括生成
+  python make_page.py docs/
 
-  # 複数曲 + インデックス
-  python make_page.py song1/ song2/ song3/ --index
-
-  # 出力先を指定（GitHub Pages用のdocsフォルダへ）
-  python make_page.py chart_output/ --title "曲名" --docs-dir docs/
+  # 1曲だけ生成
+  python make_page.py docs/saiph/
 """)
 
-    parser.add_argument("dirs", nargs="+", type=Path,
-                        help="譜面画像のディレクトリ（複数指定可）")
-    parser.add_argument("--title", default=None,
-                        help="曲名（1曲の場合）")
-    parser.add_argument("--index", action="store_true",
-                        help="複数曲のインデックスページも生成")
-    parser.add_argument("--docs-dir", type=Path, default=None,
-                        help="出力先ディレクトリ (デフォルト: 画像と同じ場所)")
+    parser.add_argument("dir", type=Path,
+                        help="docsフォルダ、または1曲分のフォルダ")
 
     args = parser.parse_args()
+    target = args.dir
+
+    if not target.is_dir():
+        print(f"[ERROR] ディレクトリではありません: {target}")
+        sys.exit(1)
+
+    # target 直下にPNGがあるか？ → 1曲分のフォルダ
+    # なければ → 親フォルダとして子を探索
+    pngs_in_target = list(target.glob("*.png"))
+
+    if pngs_in_target:
+        # 1曲分のフォルダが直接指定された
+        images = sorted(pngs_in_target, key=lambda p: _extract_number(p.name))
+        title = target.name
+        generate_chart_html(images, title, target)
+        print("[DONE] 完了！")
+        return
+
+    # 子ディレクトリを探索
+    subdirs = sorted([d for d in target.iterdir()
+                      if d.is_dir() and list(d.glob("*.png"))])
+
+    if not subdirs:
+        print(f"[ERROR] PNGを含むフォルダが見つかりません: {target}")
+        sys.exit(1)
 
     entries = []
-
-    for chart_dir in args.dirs:
-        if not chart_dir.is_dir():
-            print(f"[WARN] ディレクトリではありません: {chart_dir}")
-            continue
-
+    for chart_dir in subdirs:
         images = collect_images(chart_dir)
-        title = args.title or chart_dir.name
-
-        # 出力先
-        if args.docs_dir:
-            out_dir = args.docs_dir / chart_dir.name
-            out_dir.mkdir(parents=True, exist_ok=True)
-            # 既にdocs内にある場合はコピー不要
-            if chart_dir.resolve() != out_dir.resolve():
-                import shutil
-                for img in images:
-                    shutil.copy2(img, out_dir / img.name)
-                images = sorted(out_dir.glob("*.png"),
-                                key=lambda p: _extract_number(p.name))
-        else:
-            out_dir = chart_dir
-
-        generate_chart_html(images, title, out_dir)
+        title = chart_dir.name
+        generate_chart_html(images, title, chart_dir)
         entries.append({
             "dir": chart_dir.name,
             "title": title,
@@ -367,11 +363,8 @@ def main():
         })
 
     # インデックスページ
-    if args.index and entries:
-        index_dir = args.docs_dir if args.docs_dir else args.dirs[0].parent
-        generate_index_html(entries, index_dir)
-
-    print("[DONE] 完了！")
+    generate_index_html(entries, target)
+    print(f"[DONE] {len(entries)} 曲分のHTMLを生成しました！")
 
 
 if __name__ == "__main__":
