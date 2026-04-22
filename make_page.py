@@ -349,7 +349,8 @@ def main():
         # docs-dir指定時はコピー
         if args.docs_dir:
             import shutil
-            out_dir = args.docs_dir / (args.title or target.name)
+            # フォルダ名は元のディレクトリ名を使う（タイトルに:等が含まれても安全）
+            out_dir = args.docs_dir / target.name
             out_dir.mkdir(parents=True, exist_ok=True)
             if target.resolve() != out_dir.resolve():
                 for img in images:
