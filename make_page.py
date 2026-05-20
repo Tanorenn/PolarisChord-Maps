@@ -108,6 +108,19 @@ def generate_chart_html(images: list[Path], title: str, out_dir: Path):
       color: #e0e0e0;
       font-size: 13px;
     }}
+    .mirror-btn {{
+      background: #2a2a4a;
+      border: 1px solid #444;
+      color: #aaa;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: sans-serif;
+      transition: background 0.15s, color 0.15s;
+    }}
+    .mirror-btn:hover {{ background: #3a3a5a; color: #e0e0e0; }}
+    .mirror-btn.active {{ background: #6c63ff; color: #fff; border-color: #6c63ff; }}
     .chart-area {{
       width: 100%;
       overflow-x: auto;
@@ -155,14 +168,15 @@ def generate_chart_html(images: list[Path], title: str, out_dir: Path):
     <h1>{title}</h1>
     <div class="control">
       <span>列数</span>
-      <input type="range" id="cols" min="1" max="20" value="10">
+      <input type="range" id="cols" min="1" max="50" value="10">
       <span class="control-value" id="colsVal">10</span>
     </div>
     <div class="control">
       <span>列幅</span>
-      <input type="range" id="colWidth" min="50" max="500" value="120" step="10">
+      <input type="range" id="colWidth" min="30" max="500" value="120" step="10">
       <span class="control-value" id="colWidthVal">120px</span>
     </div>
+    <button class="mirror-btn" id="mirrorBtn">🪞 ミラー</button>
   </header>
   <div class="chart-area">
     <div class="chart-columns" id="chart"></div>
@@ -175,12 +189,31 @@ def generate_chart_html(images: list[Path], title: str, out_dir: Path):
     const colsVal = document.getElementById('colsVal');
     const widthSlider = document.getElementById('colWidth');
     const widthVal = document.getElementById('colWidthVal');
+    const mirrorBtn = document.getElementById('mirrorBtn');
+
+    let mirrored = false;
 
     // ローカルストレージから復元
     const savedCols = localStorage.getItem('chart-cols');
     const savedWidth = localStorage.getItem('chart-col-width');
+    const savedMirror = localStorage.getItem('chart-mirror');
     if (savedCols) colsSlider.value = savedCols;
     if (savedWidth) widthSlider.value = savedWidth;
+    if (savedMirror === 'true') mirrored = true;
+
+    function updateMirror() {{
+      mirrorBtn.classList.toggle('active', mirrored);
+      const imgs = chart.querySelectorAll('img');
+      imgs.forEach(img => {{
+        img.style.transform = mirrored ? 'scaleX(-1)' : '';
+      }});
+      localStorage.setItem('chart-mirror', mirrored);
+    }}
+
+    mirrorBtn.addEventListener('click', () => {{
+      mirrored = !mirrored;
+      updateMirror();
+    }});
 
     function render() {{
       const numCols = parseInt(colsSlider.value);
@@ -214,6 +247,7 @@ def generate_chart_html(images: list[Path], title: str, out_dir: Path):
 
         chart.appendChild(col);
       }}
+      updateMirror();
     }}
 
     colsSlider.addEventListener('input', render);
@@ -314,13 +348,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用例:
-  # docs/ 以下のフォルダを自動探索してHTML一括生成
+  # docs/ 以下を自動探索してHTML一括生成
   python make_page.py docs/
+
+  # chart_output/ 以下を全部docsへコピー+HTML一括生成
+  python make_page.py chart_output/ --docs-dir docs/
 
   # 1曲だけ生成
   python make_page.py docs/saiph/
 
-  # 別の場所からdocsへコピー+HTML生成
+  # 別の場所から1曲だけdocsへコピー+HTML生成
   python make_page.py chart_output/RUINA/ --title RUINA --docs-dir docs/
 """)
 
@@ -372,19 +409,37 @@ def main():
         print(f"[ERROR] PNGを含むフォルダが見つかりません: {target}")
         sys.exit(1)
 
+    # docs-dir指定時: 各曲をコピーしてからHTML生成
+    if args.docs_dir:
+        import shutil
+        args.docs_dir.mkdir(parents=True, exist_ok=True)
+
     entries = []
     for chart_dir in subdirs:
         images = collect_images(chart_dir)
         title = chart_dir.name
-        generate_chart_html(images, title, chart_dir)
+
+        if args.docs_dir:
+            out_dir = args.docs_dir / chart_dir.name
+            out_dir.mkdir(parents=True, exist_ok=True)
+            if chart_dir.resolve() != out_dir.resolve():
+                for img in images:
+                    shutil.copy2(img, out_dir / img.name)
+                images = sorted(out_dir.glob("*.png"),
+                                key=lambda p: _extract_number(p.name))
+        else:
+            out_dir = chart_dir
+
+        generate_chart_html(images, title, out_dir)
         entries.append({
-            "dir": chart_dir.name,
+            "dir": out_dir.name,
             "title": title,
             "count": len(images),
         })
 
     # インデックスページ
-    generate_index_html(entries, target)
+    index_dir = args.docs_dir if args.docs_dir else target
+    generate_index_html(entries, index_dir)
     print(f"[DONE] {len(entries)} 曲分のHTMLを生成しました！")
 
 

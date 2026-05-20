@@ -54,6 +54,19 @@
       color: #e0e0e0;
       font-size: 13px;
     }
+    .mirror-btn {
+      background: #2a2a4a;
+      border: 1px solid #444;
+      color: #aaa;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: sans-serif;
+      transition: background 0.15s, color 0.15s;
+    }
+    .mirror-btn:hover { background: #3a3a5a; color: #e0e0e0; }
+    .mirror-btn.active { background: #6c63ff; color: #fff; border-color: #6c63ff; }
     .chart-area {
       width: 100%;
       overflow-x: auto;
@@ -101,14 +114,15 @@
     <h1>saiph</h1>
     <div class="control">
       <span>列数</span>
-      <input type="range" id="cols" min="1" max="20" value="10">
+      <input type="range" id="cols" min="1" max="50" value="10">
       <span class="control-value" id="colsVal">10</span>
     </div>
     <div class="control">
       <span>列幅</span>
-      <input type="range" id="colWidth" min="50" max="500" value="120" step="10">
+      <input type="range" id="colWidth" min="30" max="500" value="120" step="10">
       <span class="control-value" id="colWidthVal">120px</span>
     </div>
+    <button class="mirror-btn" id="mirrorBtn">🪞 ミラー</button>
   </header>
   <div class="chart-area">
     <div class="chart-columns" id="chart"></div>
@@ -121,12 +135,31 @@
     const colsVal = document.getElementById('colsVal');
     const widthSlider = document.getElementById('colWidth');
     const widthVal = document.getElementById('colWidthVal');
+    const mirrorBtn = document.getElementById('mirrorBtn');
+
+    let mirrored = false;
 
     // ローカルストレージから復元
     const savedCols = localStorage.getItem('chart-cols');
     const savedWidth = localStorage.getItem('chart-col-width');
+    const savedMirror = localStorage.getItem('chart-mirror');
     if (savedCols) colsSlider.value = savedCols;
     if (savedWidth) widthSlider.value = savedWidth;
+    if (savedMirror === 'true') mirrored = true;
+
+    function updateMirror() {
+      mirrorBtn.classList.toggle('active', mirrored);
+      const imgs = chart.querySelectorAll('img');
+      imgs.forEach(img => {
+        img.style.transform = mirrored ? 'scaleX(-1)' : '';
+      });
+      localStorage.setItem('chart-mirror', mirrored);
+    }
+
+    mirrorBtn.addEventListener('click', () => {
+      mirrored = !mirrored;
+      updateMirror();
+    });
 
     function render() {
       const numCols = parseInt(colsSlider.value);
@@ -160,6 +193,7 @@
 
         chart.appendChild(col);
       }
+      updateMirror();
     }
 
     colsSlider.addEventListener('input', render);
